@@ -1,0 +1,52 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ["26.x"]
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    - run: npm ci
+    - run: npm run build --if-present
+    - run: npm test
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: RYMscrobble
+        path: dist
+    # CI never sees a local .env, so this build has no API key/secret baked
+    # in -- exactly what should be published for other people to install.
+    # Committing it back here keeps a real raw.githubusercontent.com URL
+    # (used by @downloadURL/@updateURL) always in sync with main, without
+    # anyone needing to remember a manual "build before you push" step.
+    - name: Publish built dist/ to main
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add -f dist
+        if git diff --cached --quiet; then
+          echo "dist/ unchanged, nothing to publish."
+        else
+          git commit -m "Publish built dist/ [skip ci]"
+          git push
+        fi
